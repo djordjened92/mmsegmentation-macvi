@@ -1,0 +1,12 @@
+docker build --rm --no-cache -t mmseg_macvi_116 -f docker/Dockerfile-macvi .
+
+docker run --rm -ti --shm-size=8g\
+--gpus device=0\
+-v /home/djordje/Documents/Projects:/home/djordje/Documents/Projects\
+--name mmseg mmseg_macvi_116:latest bash
+
+
+python tools/train.py configs/fcn/fcn_r50-d8_512x1024_40k_lars.py
+python tools/train.py configs/fcn/fcn_takunet_384x786_160k_lars_bs8.py
+
+python tools/train.py configs/fcn/fcn_glimmernet_384x786_160k_lars_bs16.py
