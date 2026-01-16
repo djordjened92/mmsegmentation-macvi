@@ -1,39 +1,51 @@
 # dataset settings
 dataset_type = 'LaRSDataset'
-data_root = 'path/to/lars/' # TODO: change this to your own path
-ignore_idx=255
+data_root = '/home/djordje/Documents/Projects/MaCVi2026/data/images/'
+ignore_idx = 255
+
+# 1. Normalization: Already matches ImageNet protocol
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
-crop_size = (512, 1024)
+
+# 2. Target Resolution: 768 (W) x 384 (H)
+# For RandomCrop/Pad, we use (H, W)
+crop_size = (384, 768) 
+
 train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations'),
-    dict(type='Resize', img_scale=(2048, 1024), ratio_range=(0.5, 2.0)),
+    # Resize to the target scale while allowing for augmentation scaling
+    dict(type='Resize', img_scale=(768, 384), ratio_range=(0.5, 2.0)),
+    # Ensure every crop is exactly the target size for the static graph
     dict(type='RandomCrop', crop_size=crop_size, cat_max_ratio=0.75),
     dict(type='RandomFlip', prob=0.5),
     dict(type='PhotoMetricDistortion'),
     dict(type='Normalize', **img_norm_cfg),
-    dict(type='Pad', size=crop_size, pad_val=0, seg_pad_val=ignore_idx),
+    # Pad ensures the final tensor is exactly (384, 768)
+    dict(type='CenterPad', size=crop_size, pad_val=0, seg_pad_val=ignore_idx),
     dict(type='DefaultFormatBundle'),
     dict(type='Collect', keys=['img', 'gt_semantic_seg']),
 ]
+
 test_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(
         type='MultiScaleFlipAug',
-        img_scale=(2048, 1024),
-        # img_ratios=[0.5, 0.75, 1.0, 1.25, 1.5, 1.75],
+        img_scale=(768, 384), # Fixed size for ONNX/SNPE compatibility
         flip=False,
         transforms=[
+            # keep_ratio=True maintains aspect ratio as per protocol
             dict(type='Resize', keep_ratio=True),
             dict(type='RandomFlip'),
             dict(type='Normalize', **img_norm_cfg),
+            dict(type='CenterPad', size=crop_size, pad_val=0),
             dict(type='ImageToTensor', keys=['img']),
             dict(type='Collect', keys=['img']),
         ])
 ]
+
 data = dict(
-    samples_per_gpu=4,
+    samples_per_gpu=16, # TakuNet is light, you can likely increase this
     workers_per_gpu=4,
     train=dict(
         type=dataset_type,

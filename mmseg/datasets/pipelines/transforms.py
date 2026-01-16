@@ -455,6 +455,49 @@ class Pad(object):
                     f'pad_val={self.pad_val})'
         return repr_str
 
+@PIPELINES.register_module()
+class CenterPad(object):
+    """Center pad the image & mask to a fixed size.
+    Args:
+        size (tuple): Fixed padding size (H, W).
+        pad_val (float): Padding value for image. Default: 0.
+        seg_pad_val (float): Padding value for mask. Default: 255.
+    """
+    def __init__(self, size, pad_val=0, seg_pad_val=255):
+        self.size = size
+        self.pad_val = pad_val
+        self.seg_pad_val = seg_pad_val
+
+    def __call__(self, results):
+        img = results['img']
+        h, w = img.shape[:2]
+        target_h, target_w = self.size
+
+        # Calculate padding for each side
+        pad_h = max(0, target_h - h)
+        pad_w = max(0, target_w - w)
+        
+        top = pad_h // 2
+        bottom = pad_h - top
+        left = pad_w // 2
+        right = pad_w - left
+        
+        padding = (left, top, right, bottom) # MMCV format: (L, T, R, B)
+
+        # Apply centered padding
+        results['img'] = mmcv.impad(img, padding=padding, pad_val=self.pad_val)
+        
+        for key in results.get('seg_fields', []):
+            results[key] = mmcv.impad(
+                results[key], padding=padding, pad_val=self.seg_pad_val)
+
+        # Update metadata for consistency
+        results['pad_shape'] = results['img'].shape
+        results['pad_fixed_size'] = self.size
+        return results
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}(size={self.size}, pad_val={self.pad_val})'
 
 @PIPELINES.register_module()
 class Normalize(object):
